@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Avance de Refaccionamiento — III Servicios (solo lectura)</title>
+<style>
+:root{
+  --bg-primary:#f4f6f8; --bg-card:#ffffff; --bg-header:#1f4e78;
+  --text-primary:#1f2937; --text-secondary:#6c757d; --text-on-dark:#ffffff;
+  --positive:#1e8e3e; --warning:#e6a700; --negative:#c62828;
+  --gap:16px; --radius:10px;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg-primary);color:var(--text-primary);line-height:1.5;}
+.container{max-width:1200px;margin:0 auto;padding:16px;}
+header{background:var(--bg-header);color:var(--text-on-dark);padding:18px 22px;border-radius:var(--radius);margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;}
+header h1{font-size:19px;font-weight:600;}
+header p{font-size:12px;opacity:.85;margin-top:3px;}
+.badge-readonly{background:rgba(255,255,255,.15);padding:5px 12px;border-radius:14px;font-size:11px;font-weight:600;}
+.card{background:var(--bg-card);border-radius:var(--radius);padding:20px 24px;box-shadow:0 1px 3px rgba(0,0,0,.08);margin-bottom:16px;}
+.btn{background:var(--bg-header);color:#fff;border:none;padding:11px 22px;border-radius:8px;font-weight:600;font-size:14px;cursor:pointer;}
+.btn:hover{opacity:.92;}
+.btn.secondary{background:#e2e6ea;color:var(--text-primary);}
+.kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;margin-bottom:16px;}
+.kpi-card{background:var(--bg-card);border-radius:var(--radius);padding:16px 20px;box-shadow:0 1px 3px rgba(0,0,0,.08);border-left:4px solid var(--bg-header);}
+.kpi-card.warn{border-left-color:var(--warning);}
+.kpi-card.bad{border-left-color:var(--negative);}
+.kpi-label{font-size:11px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px;}
+.kpi-value{font-size:26px;font-weight:700;}
+.filters{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;}
+.filters select{padding:7px 10px;border:1px solid #d7dbe0;border-radius:7px;font-size:13px;}
+.unit-group{border:1px solid #e5e7eb;border-radius:8px;margin-bottom:10px;overflow:hidden;}
+.unit-group summary{list-style:none;cursor:pointer;padding:10px 14px;background:#f8f9fa;display:flex;flex-wrap:wrap;align-items:center;gap:10px;font-size:13px;}
+.unit-group summary::-webkit-details-marker{display:none;}
+.unit-group summary .pmx{font-weight:700;font-size:14px;}
+.unit-group summary .tad-tag{font-size:11px;color:var(--text-secondary);background:#e9ecef;padding:2px 8px;border-radius:10px;}
+.unit-body{padding:0 14px 12px;}
+.data-table{width:100%;border-collapse:collapse;font-size:12.5px;}
+.data-table thead th{text-align:left;padding:8px 9px;border-bottom:2px solid #dee2e6;color:var(--text-secondary);font-weight:600;font-size:11px;text-transform:uppercase;}
+.data-table tbody td{padding:7px 9px;border-bottom:1px solid #f0f0f0;}
+.badge{display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;}
+.badge-green{background:#d4edda;color:#1e7e34;}
+.badge-yellow{background:#fff3cd;color:#8a6500;}
+.badge-red{background:#f8d7da;color:#a71d2a;}
+.badge-gray{background:#e2e3e5;color:#41464b;}
+.link-badge{font-size:11px;color:var(--bg-header);text-decoration:underline;}
+.empty-msg{color:var(--text-secondary);font-size:13px;padding:20px;text-align:center;}
+.loading{color:var(--text-secondary);font-size:13px;padding:20px;text-align:center;}
+footer{text-align:center;font-size:11px;color:var(--text-secondary);padding:14px 0;}
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <div>
+      <h1>Avance de Refaccionamiento de Flota — III Servicios</h1>
+      <p>Meta: surtido el mismo día del pedido · Vista de solo lectura</p>
+    </div>
+    <span class="badge-readonly">👁 Solo lectura</span>
+  </header>
+
+  <section id="panel-avance">
+    <div class="kpi-row" id="kpi-row"></div>
+    <div class="card">
+      <div class="filters">
+        <select id="filtro-tad" onchange="renderAvance()"><option value="all">Todos los TAD</option></select>
+        <select id="filtro-estatus" onchange="renderAvance()"><option value="all">Todos los estatus</option></select>
+        <button class="btn secondary" onclick="cargarDatos()">↻ Actualizar</button>
+      </div>
+      <div id="avance-wrap"><div class="loading">Cargando datos del Sheet...</div></div>
+    </div>
+  </section>
+
+  <footer>Datos en vivo desde Google Sheets · Se actualiza cada vez que abres esta página · Este archivo no permite capturar ni editar datos</footer>
+</div>
+
+<script>
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxcjCxyTk-agcxaE8nlYRnaPx6i4I1rMEMYdb0Avb0vvk-vg3zvf7zo2b15ATW8eW9QOw/exec";
+let ALL_ROWS = [];
+
+async function cargarDatos(){
+  try{
+    const res = await fetch(SCRIPT_URL, {method:'GET'});
+    const json = await res.json();
+    ALL_ROWS = json.rows || [];
+    poblarFiltros();
+    renderAvance();
+  }catch(err){
+    document.getElementById('avance-wrap').innerHTML = '<div class="empty-msg">No se pudo cargar el Sheet. Verifica tu conexión a internet. (' + err + ')</div>';
+  }
+}
+
+function poblarFiltros(){
+  const tads = [...new Set(ALL_ROWS.map(r=>r.TAD).filter(Boolean))].sort();
+  const selTad = document.getElementById('filtro-tad');
+  const currentTad = selTad.value;
+  selTad.innerHTML = '<option value="all">Todos los TAD</option>' + tads.map(t=>`<option value="${t}">${t}</option>`).join('');
+  selTad.value = currentTad || 'all';
+
+  const estatuses = [...new Set(ALL_ROWS.map(r=>r.Estatus).filter(Boolean))].sort();
+  const selE = document.getElementById('filtro-estatus');
+  const currentE = selE.value;
+  selE.innerHTML = '<option value="all">Todos los estatus</option>' + estatuses.map(e=>`<option value="${e}">${e}</option>`).join('');
+  selE.value = currentE || 'all';
+}
+
+function diasRetraso(row){
+  if(!row.Timestamp) return null;
+  const pedido = new Date(row.Timestamp);
+  if(row.Estatus === 'ENTREGADO' && row.FechaEntrega){
+    const entrega = new Date(row.FechaEntrega);
+    return Math.max(0, Math.round((entrega - pedido)/86400000));
+  }
+  const hoy = new Date();
+  return Math.max(0, Math.round((hoy - pedido)/86400000));
+}
+function cumpleMismoDia(row){
+  if(row.Estatus !== 'ENTREGADO' || !row.FechaEntrega) return 'NO';
+  const pedido = new Date(row.Timestamp);
+  const entrega = new Date(row.FechaEntrega);
+  return Math.round((entrega-pedido)/86400000) === 0 ? 'SI' : 'NO';
+}
+
+function renderAvance(){
+  const tadFiltro = document.getElementById('filtro-tad').value;
+  const estatusFiltro = document.getElementById('filtro-estatus').value;
+  let rows = ALL_ROWS.map((r,i)=>({...r, _idx:i, dias: diasRetraso(r), cumple: cumpleMismoDia(r)}));
+  if(tadFiltro!=='all') rows = rows.filter(r=>r.TAD===tadFiltro);
+  if(estatusFiltro!=='all') rows = rows.filter(r=>r.Estatus===estatusFiltro);
+
+  const total = rows.length;
+  const entregadasMismoDia = rows.filter(r=>r.cumple==='SI').length;
+  const pctCumple = total ? (entregadasMismoDia/total*100) : 0;
+  const abiertas = rows.filter(r=>r.Estatus!=='ENTREGADO');
+  const avgRetraso = abiertas.length ? (abiertas.reduce((a,b)=>a+(b.dias||0),0)/abiertas.length) : 0;
+  const criticas = rows.filter(r=>(r.dias||0)>=3 && r.Estatus!=='ENTREGADO').length;
+
+  document.getElementById('kpi-row').innerHTML = `
+    <div class="kpi-card"><div class="kpi-label">Total partidas</div><div class="kpi-value">${total}</div></div>
+    <div class="kpi-card bad"><div class="kpi-label">% Cumplimiento mismo día</div><div class="kpi-value">${pctCumple.toFixed(1)}%</div></div>
+    <div class="kpi-card warn"><div class="kpi-label">Prom. días retraso (abiertas)</div><div class="kpi-value">${avgRetraso.toFixed(1)}</div></div>
+    <div class="kpi-card bad"><div class="kpi-label">Críticas (&ge;3 días)</div><div class="kpi-value">${criticas}</div></div>
+  `;
+
+  if(total===0){
+    document.getElementById('avance-wrap').innerHTML = '<div class="empty-msg">No hay partidas registradas todavía (o no coinciden con el filtro).</div>';
+    return;
+  }
+
+  const groups = {};
+  rows.forEach(r=>{
+    const key = r.TAD + '||' + r.PMX;
+    if(!groups[key]) groups[key] = {tad:r.TAD, pmx:r.PMX, flota:r.Flota, items:[]};
+    groups[key].items.push(r);
+  });
+  const groupList = Object.values(groups).map(g=>{
+    const t = g.items.length;
+    const ent = g.items.filter(x=>x.cumple==='SI').length;
+    const maxRetraso = Math.max(...g.items.map(x=>x.dias||0));
+    return {...g, total:t, entregadas:ent, maxRetraso};
+  });
+  groupList.sort((a,b)=> b.maxRetraso - a.maxRetraso || String(a.pmx).localeCompare(String(b.pmx)));
+
+  let html = '';
+  groupList.forEach((g,gi)=>{
+    let cls='badge-green';
+    if(g.maxRetraso>=3) cls='badge-red'; else if(g.maxRetraso>=1) cls='badge-yellow';
+    html += `<details class="unit-group"${gi<3?' open':''}><summary>
+      <span class="pmx">${g.pmx}</span>
+      <span class="tad-tag">${g.tad}</span>
+      <span>Flota: ${g.flota||'-'}</span>
+      <span>${g.entregadas}/${g.total} entregadas</span>
+      <span class="badge ${cls}">Máx. retraso: ${g.maxRetraso}d</span>
+    </summary><div class="unit-body"><table class="data-table"><thead><tr>
+      <th>Descripción</th><th>Cant.</th><th>Prioridad</th><th>Estatus</th><th>Días</th><th>Motivo</th><th>Reportó</th><th>Surtió / Evidencia</th>
+    </tr></thead><tbody>`;
+    g.items.sort((a,b)=>(b.dias||0)-(a.dias||0)).forEach(row=>{
+      let dcls='badge-gray';
+      if(row.dias===0) dcls='badge-green'; else if(row.dias<=2) dcls='badge-yellow'; else if(row.dias>=3) dcls='badge-red';
+      const motivoCell = row.Motivo ? `<span class="badge badge-yellow">${row.Motivo}</span>` : '<span class="badge badge-gray">Sin especificar</span>';
+      let surtioCell = '-';
+      if(row.Estatus==='ENTREGADO'){
+        surtioCell = (row.QuienSurte||'-') + (row.HoraSurtimiento ? ' · ' + row.HoraSurtimiento : '');
+        if(row.EvidenciaLink){ surtioCell += ` · <a class="link-badge" href="${row.EvidenciaLink}" target="_blank">ver evidencia</a>`; }
+      }
+      html += `<tr><td>${row.Descripcion||'-'}</td><td>${row.Cantidad||'-'}</td><td>${row.Prioridad||'-'}</td><td>${row.Estatus||'-'}</td><td><span class="badge ${dcls}">${row.dias}</span></td><td>${motivoCell}</td><td>${row.Supervisor||'-'}</td><td>${surtioCell}</td></tr>`;
+    });
+    html += '</tbody></table></div></details>';
+  });
+  document.getElementById('avance-wrap').innerHTML = html;
+}
+
+cargarDatos();
+</script>
+</body>
+</html>
